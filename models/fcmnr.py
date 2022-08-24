@@ -6,7 +6,7 @@ from tensorflow.keras.models import Model
 
 
 
-def FCMnR_model(n_layers,input_shape,activation_function,learning_rate):
+def fcmnr_model(n_layers,input_shape,activation_function,learning_rate):
     input_vec = Input(shape=input_shape)
     x0=Activation(activation_function)(BatchNormalization()((Dense(1024)(input_vec))))
     x1=Activation(activation_function)(BatchNormalization()((Dense(1024)(x0))))

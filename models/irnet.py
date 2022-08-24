@@ -5,7 +5,7 @@ from tensorflow.keras.models import Model
 
 
 
-def irnet_model(n_layers,input_shape,activation_function,learning_rate):   
+def irnet_model(input_shape,n_layers,activation_function,learning_rate):   
     input_vec = Input(shape=input_shape)
     x0=Activation(activation_function)(BatchNormalization()(Dense(1024)(input_vec)))
     m1=concatenate([input_vec, x0], axis=-1)
@@ -41,7 +41,7 @@ def irnet_model(n_layers,input_shape,activation_function,learning_rate):
     model=Model(input_vec,xf)
     model.compile(
       optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
-      loss=tf.keras.losses.BinaryCrossentropy,
+      loss=tf.keras.losses.binary_crossentropy,
       metrics=['accuracy'])
     
     return model
