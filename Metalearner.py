@@ -11,7 +11,7 @@ import pathlib
 
 # %%
 
-def write_meta_data(data_file_name,dataset_column_names,x_column_names,metric_name,error_metric=True,add_header=False):
+def write_meta_data(data_file_name,dataset_column_names,x_column_names,metric_name,error_metric=True,add_header=False,dim=1):
     dataset=pd.read_csv(os.path.dirname(os.path.abspath(__file__))+"/"+data_file_name,names=dataset_column_names)
     y=np.zeros(len(dataset))
     
@@ -26,8 +26,9 @@ def write_meta_data(data_file_name,dataset_column_names,x_column_names,metric_na
         y=acc_ratio
     
     x=dataset[x_column_names]
+    x["dimension"]=dim
     xy=pd.concat([x,y],axis=1)
-    xy.columns=[*x_column_names,'y']
+    xy.columns=[*x_column_names,'dimension','y']
     # if add_header: pd.DataFrame(columns=x_column_names).to_csv(os.path.dirname(os.path.abspath(__file__))+"/"'data/metadataset.csv', mode='a', header=False,index=False)
 
     xy.to_csv(os.path.dirname(os.path.abspath(__file__))+"/"'data/metadataset.csv', mode='a', header=add_header,index=False)
@@ -176,7 +177,7 @@ def meta_learner(n_top_hp_to_select,dataset_column_names,x_column_names,metric_n
     top_lr,top_bz,top_layers,top_af,finish_order=get_top_hp_combination(n_top_hp_to_select,predictions)
     return top_lr,top_bz,top_layers,top_af,finish_order
 
-def test(data_file_name,add_header=False):
+def test(data_file_name,add_header=False,dim=1):
     to_categorical_column_names=["activation_function"]
     
     max_epochs=10
@@ -208,7 +209,7 @@ def test(data_file_name,add_header=False):
     dataset_column_names=["architecture","task","num_features","training_samples",
                     "n_layers", "input_shape","activation_function",
                     "learning_rate", "batch_size", "loss","fit_time","metric"]
-    # header_metadata=["architecture","task","num_features","training_samples","n_layers","activation_function","learning_rate", "batch_size","metric"]
+    header_metadata=["architecture","task","num_features","training_samples","n_layers","activation_function","learning_rate", "batch_size","metric"]
     x_column_names=["architecture","num_features","training_samples",
                             "n_layers","activation_function",
                             "learning_rate", "batch_size"]
@@ -216,17 +217,17 @@ def test(data_file_name,add_header=False):
     to_categorical_column_names=["activation_function","architecture"]
     
 
-    # write_meta_data(data_file_name,dataset_column_names,x_column_names,metric_name,error_metric=True,add_header=add_header)
-    top_lr,top_bz,top_layers,top_af,finish_order=meta_learner(2,dataset_column_names,x_column_names,metric_name,to_categorical_column_names,data_file_name,
-                                                                num_features,training_and_validation_samples,n_layers,learning_rate,batch_size,activation_function)
-    print(top_lr,top_bz,top_layers,top_af,finish_order)
+    write_meta_data(data_file_name,dataset_column_names,header_metadata,metric_name,error_metric=True,add_header=add_header,dim=dim)
+    # top_lr,top_bz,top_layers,top_af,finish_order=meta_learner(2,dataset_column_names,x_column_names,metric_name,to_categorical_column_names,data_file_name,
+    #                                                             num_features,training_and_validation_samples,n_layers,learning_rate,batch_size,activation_function)
+    # print(top_lr,top_bz,top_layers,top_af,finish_order)
     
 
 # %%
 data_file_name="data/1d_fcmnr.csv"
-test(data_file_name,True)
+test(data_file_name,True,1)
 data_file_name="data/1d_fcunet.csv"
-test(data_file_name)
+test(data_file_name,dim=1)
 data_file_name="data/1d_irnet.csv"
-test(data_file_name)
+test(data_file_name,dim=1)
 
