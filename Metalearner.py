@@ -4,15 +4,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import ParameterGrid
-
+import os
+import pathlib
 # %% [markdown]
 # ### Load the datasets
 
 # %%
-def load_meta_data(data_file_name,dataset_column_names,x_column_names,to_categorical_column_names,metric_name,error_metric=True):
-    dataset=pd.read_csv(data_file_name,names=dataset_column_names)
+
+def write_meta_data(data_file_name,dataset_column_names,x_column_names,metric_name,error_metric=True,add_header=False):
+    dataset=pd.read_csv(os.path.dirname(os.path.abspath(__file__))+"/"+data_file_name,names=dataset_column_names)
     y=np.zeros(len(dataset))
-    print(len(y))
+    
     #CALCULATE THE Y
     if error_metric:
         min_error=dataset.loc[dataset[metric_name].idxmin()][metric_name]
@@ -24,10 +26,40 @@ def load_meta_data(data_file_name,dataset_column_names,x_column_names,to_categor
         y=acc_ratio
     
     x=dataset[x_column_names]
-    print(x[to_categorical_column_names[:]])
-    dummies = pd.get_dummies(x[to_categorical_column_names[:]],prefix=[''],prefix_sep=[''])
-    x=x.drop(to_categorical_column_names,axis=1)
-    x=pd.concat([x,dummies],axis=1)
+    xy=pd.concat([x,y],axis=1)
+    xy.columns=[*x_column_names,'y']
+    # if add_header: pd.DataFrame(columns=x_column_names).to_csv(os.path.dirname(os.path.abspath(__file__))+"/"'data/metadataset.csv', mode='a', header=False,index=False)
+
+    xy.to_csv(os.path.dirname(os.path.abspath(__file__))+"/"'data/metadataset.csv', mode='a', header=add_header,index=False)
+
+
+def load_meta_data(data_file_name,dataset_column_names,x_column_names,to_categorical_column_names,metric_name,error_metric=True):
+    dataset=pd.read_csv(os.path.dirname(os.path.abspath(__file__))+"/"+data_file_name,names=dataset_column_names)
+    y=np.zeros(len(dataset))
+    
+    #CALCULATE THE Y
+    if error_metric:
+        min_error=dataset.loc[dataset[metric_name].idxmin()][metric_name]
+        error_ratio=min_error/dataset[metric_name]
+        y=error_ratio
+    else:
+        max_acc=dataset.loc[dataset[metric_name].idxmax()][metric_name]
+        acc_ratio=max_acc/dataset[metric_name]
+        y=acc_ratio
+    
+    x=dataset[x_column_names]
+    # if (len(to_categorical_column_names)>1):
+    #     raise Exception("to_categorical_column_names >1 not supported")
+    # to_cat_column_values=np.asarray(x[to_categorical_column_names[:]]).ravel()
+    for to_categorical_column in to_categorical_column_names:
+        to_cat_column_values=np.asarray(x[to_categorical_column]).ravel()
+        dummies = pd.get_dummies(to_cat_column_values,prefix='',prefix_sep='')
+        x=x.drop(to_categorical_column,axis=1)
+        x=pd.concat([x,dummies],axis=1)
+
+    # dummies = pd.get_dummies(to_cat_column_values,prefix='',prefix_sep='')
+    # x=x.drop(to_categorical_column_names,axis=1)
+    # x=pd.concat([x,dummies],axis=1)
     x.head()
     return x,y
 
@@ -45,7 +77,7 @@ def create_metamodel(x,y):
 def create_hp_space(num_features,training_samples,n_layers,learning_rate,batch_size,activation_function):
     #CREATE THE HYPERPARAMETER SPACE
     dict_all_hyperparams=dict(num_features=num_features,
-                                training_samples=training_samples,
+                                training_samples=[training_samples],
                                 n_layers=n_layers,
                                 learning_rate=learning_rate,
                                 batch_size=batch_size,
@@ -56,16 +88,24 @@ def create_hp_space(num_features,training_samples,n_layers,learning_rate,batch_s
     
 def predict_hp_space(grid_search_population,regr,to_categorical_column_names,to_categorical_values,x_column_names):
     #PREPROCESS THE DATA TO BE PREDICTED BY THE METALEARNER
-    dummies2 = pd.get_dummies(grid_search_population[to_categorical_column_names[:]],prefix=[''],prefix_sep=[''])
-    x_test=pd.concat([grid_search_population[x_column_names],dummies2],axis=1)
-    x_test=x_test.drop(to_categorical_column_names,axis=1)
+    # if (len(to_categorical_column_names)>1):
+    #     raise Exception("to_categorical_column_values >1 not supported")
+    to_categorical_values=[]
+    for to_categorical_column in to_categorical_column_names:
+        to_categorical_values.append(grid_search_population[to_categorical_column].unique())
+        to_cat_column_values=np.asarray(grid_search_population[to_categorical_column]).ravel()
+        dummies = pd.get_dummies(to_cat_column_values,prefix='',prefix_sep='')
+        x_test=pd.concat([grid_search_population[x_column_names],dummies],axis=1)
+        x_test=x_test.drop(to_categorical_column,axis=1)
+    
     #PREDICTION OF THE HYPERPARAMETER SPACE
     predictions= pd.DataFrame(regr.predict(x_test))
     x_test_predicted=x_test.loc[:]
 
     #REVERSE THE CATEGORICAL OF THE ACTIVATION FUNCTION
-    x_test_predicted["activation_function"]=x_test_predicted[to_categorical_values].idxmax(axis=1)
-    x_test_predicted=x_test_predicted.drop(to_categorical_values,axis=1)
+    for to_categorical_column,to_categorical_value in to_categorical_column_names,to_categorical_values:
+        x_test_predicted[to_categorical_column]=x_test_predicted[to_categorical_value].idxmax(axis=1)
+        x_test_predicted=x_test_predicted.drop(to_categorical_value,axis=1)
 
     x_test_predicted["y"]=pd.DataFrame(regr.predict(x_test))
     x_test_predicted=x_test_predicted.sort_values("y",ascending=False)
@@ -121,35 +161,72 @@ def get_top_hp_combination(n_top_hp_to_select,x_test_predicted):
 # %%
 
 #DATASET NAMES    
-def meta_learner(n_top_hp_to_select):
-    dataset_column_names=["architecture","task","num_features","training_samples",
-                "n_layers", "input_shape","activation_function",
-                "learning_rate", "batch_size", "loss","fit_time","mae"]
-    x_column_names=["num_features","training_samples",
-                            "n_layers","activation_function",
-                            "learning_rate", "batch_size",]
-    metric_name="mae"
+def meta_learner(n_top_hp_to_select,dataset_column_names,x_column_names,metric_name,to_categorical_column_names,data_file_name,
+                num_features,training_samples,n_layers,learning_rate,batch_size,activation_function):
+    
+
+    
+    x,y=load_meta_data(data_file_name,dataset_column_names,x_column_names,to_categorical_column_names,metric_name,error_metric=True)                              
+    
+    model=create_metamodel(x,y)
+    gs_population=create_hp_space(num_features,training_samples,n_layers,learning_rate,batch_size,activation_function)
+    
+    predictions=predict_hp_space(gs_population,model,to_categorical_column_names,activation_function,x_column_names)
+
+    top_lr,top_bz,top_layers,top_af,finish_order=get_top_hp_combination(n_top_hp_to_select,predictions)
+    return top_lr,top_bz,top_layers,top_af,finish_order
+
+def test(data_file_name,add_header=False):
     to_categorical_column_names=["activation_function"]
-    data_file_name="./data/1d_irnet.csv"
+    
+    max_epochs=10
+    patience_epochs=2
+    metric_to_evaluate="balanced_accuracy"
+    sort_order_desc=True
+    architecture_name="irnet"
+    problem_type="prediction"
+    #FILES NAME
+    hp_dataset_name="test_hp_dataset.csv"
+    weights_folder="data/weights/"
     #HYPERPARAMETERS TO EVALUATE
     num_features=[29]
-    training_samples=[240122]
+    training_and_validation_samples=99999
     n_layers=[1,2,3]
     learning_rate=[0.01,0.001,0.0001,0.00001]
     batch_size=[16,32,64,128]
     activation_function=['relu','elu','tanh','sigmoid']
 
+    #GA configuration
+    all_hyperparams=[n_layers,learning_rate,batch_size,activation_function]
+    population_size=6
+    sel_prt=2
+    rand_prt=2
+    generations=2
 
+    #META DATASET
+    n_top_hp_to_select=2
+    dataset_column_names=["architecture","task","num_features","training_samples",
+                    "n_layers", "input_shape","activation_function",
+                    "learning_rate", "batch_size", "loss","fit_time","metric"]
+    # header_metadata=["architecture","task","num_features","training_samples","n_layers","activation_function","learning_rate", "batch_size","metric"]
+    x_column_names=["architecture","num_features","training_samples",
+                            "n_layers","activation_function",
+                            "learning_rate", "batch_size"]
+    metric_name="metric"
+    to_categorical_column_names=["activation_function","architecture"]
+    
 
-    x,y=load_meta_data(data_file_name,dataset_column_names,x_column_names,to_categorical_column_names,metric_name,error_metric=True)                              
-    model=create_metamodel(x,y)
-    gs_population=create_hp_space(num_features,training_samples,n_layers,learning_rate,batch_size,activation_function)
-    predictions=predict_hp_space(gs_population,model,to_categorical_column_names,activation_function,x_column_names)
-    top_lr,top_bz,top_layers,top_af,finish_order=get_top_hp_combination(n_top_hp_to_select,predictions)
-    return top_lr,top_bz,top_layers,top_af,finish_order
-
+    # write_meta_data(data_file_name,dataset_column_names,x_column_names,metric_name,error_metric=True,add_header=add_header)
+    top_lr,top_bz,top_layers,top_af,finish_order=meta_learner(2,dataset_column_names,x_column_names,metric_name,to_categorical_column_names,data_file_name,
+                                                                num_features,training_and_validation_samples,n_layers,learning_rate,batch_size,activation_function)
+    print(top_lr,top_bz,top_layers,top_af,finish_order)
+    
 
 # %%
-
-
+data_file_name="data/1d_fcmnr.csv"
+test(data_file_name,True)
+data_file_name="data/1d_fcunet.csv"
+test(data_file_name)
+data_file_name="data/1d_irnet.csv"
+test(data_file_name)
 
