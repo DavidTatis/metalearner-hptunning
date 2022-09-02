@@ -61,10 +61,10 @@ def test(data_file_name,add_header=False,dim=1,dataset_name="empty"):
 
     #META DATASET
     n_top_hp_to_select=2
-    dataset_column_names=["architecture","task","num_features","training_samples",
+    dataset_column_names=["architecture","error_metric","task","num_features","training_samples",
                     "n_layers", "input_shape","activation_function",
                     "learning_rate", "batch_size", "loss","fit_time","metric"]
-    header_metadata=["architecture","task","num_features","training_samples","n_layers","activation_function","learning_rate", "batch_size","metric"]
+    header_metadata=["architecture","error_metric","task","num_features","training_samples","n_layers","activation_function","learning_rate", "batch_size","metric"]
     x_column_names=["architecture","num_features","training_samples",
                             "n_layers","activation_function",
                             "learning_rate", "batch_size"]
@@ -80,15 +80,15 @@ def test(data_file_name,add_header=False,dim=1,dataset_name="empty"):
 
 
 
-# dataset_name="flight-price-prediction"
-# test("data/1d_fcunet.csv",dim=1,add_header=True,dataset_name=dataset_name)
-# test("data/1d_irnet.csv",dim=1,dataset_name=dataset_name)
-# test("data/1d_fcmnr.csv",dim=1,dataset_name=dataset_name)
+dataset_name="flight-price-prediction"
+test("data/1d_fcunet.csv",dim=1,add_header=True,dataset_name=dataset_name)
+test("data/1d_irnet.csv",dim=1,dataset_name=dataset_name)
+test("data/1d_fcmnr.csv",dim=1,dataset_name=dataset_name)
 
-# dataset_name="brain-mri-segmentation"
-# test("data/2d_mnr.csv",dim=2,dataset_name=dataset_name)
-# test("data/2d_unet.csv",dim=2,dataset_name=dataset_name)
-# test("data/2d_irnet.csv",dim=2,dataset_name=dataset_name)
+dataset_name="brain-mri-segmentation"
+test("data/2d_mnr.csv",dim=2,dataset_name=dataset_name)
+test("data/2d_unet.csv",dim=2,dataset_name=dataset_name)
+test("data/2d_irnet.csv",dim=2,dataset_name=dataset_name)
 
-# dataset_name="indian-pines"
-# test("data/3d_cnn.csv",dim=3,dataset_name=dataset_name)
+dataset_name="indian-pines"
+test("data/3d_cnn.csv",dim=3,dataset_name=dataset_name)
