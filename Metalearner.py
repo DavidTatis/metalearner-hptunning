@@ -1,4 +1,5 @@
 # %%
+from platform import architecture
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,31 +12,8 @@ import pathlib
 
 # %%
 
-def write_meta_data(data_file_name,dataset_column_names,header_metadata,metric_name,error_metric=True,add_header=False,dim=1,dataset_name="empty"):
-    dataset=pd.read_csv(os.path.dirname(os.path.abspath(__file__))+"/"+data_file_name,names=dataset_column_names)
-    y=np.zeros(len(dataset))
-    
-    #CALCULATE THE Y
-    if error_metric:
-        min_error=dataset.loc[dataset[metric_name].idxmin()][metric_name]
-        error_ratio=min_error/dataset[metric_name]
-        y=error_ratio
-    else:
-        max_acc=dataset.loc[dataset[metric_name].idxmax()][metric_name]
-        acc_ratio=max_acc/dataset[metric_name]
-        y=acc_ratio
-    
-    x=dataset[header_metadata]
-    x.loc[:,"dimension"]=dim
-    x.loc[:,"dataset"]=dataset_name
-    xy=pd.concat([x,y],axis=1)
-    xy.columns=[*header_metadata,"dimension","dataset",'y']
-    # if add_header: pd.DataFrame(columns=header_metadata).to_csv(os.path.dirname(os.path.abspath(__file__))+"/"'data/metadataset.csv', mode='a', header=False,index=False)
 
-    xy.to_csv(os.path.dirname(os.path.abspath(__file__))+"/"'data/metadataset.csv', mode='a', header=add_header,index=False)
-
-
-def load_meta_data(data_file_name,dataset_column_names,x_column_names,to_categorical_column_names,metric_name,error_metric=True):
+def create_metadata(data_file_name,dataset_column_names,x_column_names,to_categorical_column_names,metric_name,error_metric=True):
     dataset=pd.read_csv(os.path.dirname(os.path.abspath(__file__))+"/"+data_file_name,names=dataset_column_names)
     y=np.zeros(len(dataset))
     
@@ -168,7 +146,7 @@ def meta_learner(n_top_hp_to_select,dataset_column_names,x_column_names,metric_n
     
 
     
-    x,y=load_meta_data(data_file_name,dataset_column_names,x_column_names,to_categorical_column_names,metric_name,error_metric=True)                              
+    x,y=create_metadata(data_file_name,dataset_column_names,x_column_names,to_categorical_column_names,metric_name,error_metric=True)                              
     
     model=create_metamodel(x,y)
     gs_population=create_hp_space(num_features,training_samples,n_layers,learning_rate,batch_size,activation_function)
@@ -178,7 +156,12 @@ def meta_learner(n_top_hp_to_select,dataset_column_names,x_column_names,metric_n
     top_lr,top_bz,top_layers,top_af,finish_order=get_top_hp_combination(n_top_hp_to_select,predictions)
     return top_lr,top_bz,top_layers,top_af,finish_order
 
-def test(data_file_name,add_header=False,dim=1,dataset_name="empty"):
+
+
+# %%
+
+
+def test_metalearner(data_file_name,n_top_hp_to_select,dataset_column_names,x_column_names,metric_name,training_samples):
     to_categorical_column_names=["activation_function"]
     
     max_epochs=10
@@ -204,39 +187,59 @@ def test(data_file_name,add_header=False,dim=1,dataset_name="empty"):
     sel_prt=2
     rand_prt=2
     generations=2
-
-    #META DATASET
-    n_top_hp_to_select=2
-    dataset_column_names=["architecture","task","num_features","training_samples",
-                    "n_layers", "input_shape","activation_function",
-                    "learning_rate", "batch_size", "loss","fit_time","metric"]
-    header_metadata=["architecture","task","num_features","training_samples","n_layers","activation_function","learning_rate", "batch_size","metric"]
-    x_column_names=["architecture","num_features","training_samples",
-                            "n_layers","activation_function",
-                            "learning_rate", "batch_size"]
-    metric_name="metric"
-    to_categorical_column_names=["activation_function","architecture"]
     
-
-    write_meta_data(data_file_name,dataset_column_names,header_metadata,metric_name,error_metric=True,add_header=add_header,dim=dim,dataset_name=dataset_name)
-    # top_lr,top_bz,top_layers,top_af,finish_order=meta_learner(2,dataset_column_names,x_column_names,metric_name,to_categorical_column_names,data_file_name,
-    #                                                             num_features,training_and_validation_samples,n_layers,learning_rate,batch_size,activation_function)
-    # print(top_lr,top_bz,top_layers,top_af,finish_order)
+    meta_learner(n_top_hp_to_select,dataset_column_names,x_column_names,metric_name,to_categorical_column_names,data_file_name,
+                num_features,training_samples,n_layers,learning_rate,batch_size,activation_function)
+    return 1
     
-
 # %%
 
+def load_metadata(data_file_name,dnn_architecture,dnn_task,dnn_dim):
+    dataset=pd.read_csv(os.path.dirname(os.path.abspath(__file__))+"/"+data_file_name,names=dataset_column_names)
+    selected_arch=""
+    
+    error_metric= 1 if dnn_dim==1 else 0
 
-dataset_name="flight-price-prediction"
-test("data/1d_fcunet.csv",dim=1,add_header=True,dataset_name=dataset_name)
-test("data/1d_irnet.csv",dim=1,dataset_name=dataset_name)
-test("data/1d_fcmnr.csv",dim=1,dataset_name=dataset_name)
+    if(dnn_architecture=='all'):
+        dataset_task_dim=dataset.loc[(dataset["task"]==dnn_task) &
+                                        (dataset["dimension"]==str(dnn_dim)) &
+                                        (dataset["error_metric"]==str(error_metric))]
+        dataset_task_dim["metric"] = pd.to_numeric(dataset_task_dim["metric"])
+        dataset_task_dim=dataset_task_dim.sort_values("metric",ascending=bool(error_metric))
+        best_arch=(dataset_task_dim.head(1)).loc[:,"architecture"].values[0]
+        dataset_task_dim_arch=dataset_task_dim.loc[(dataset_task_dim["architecture"]==best_arch)]
+    else:
+        dataset_task_dim_arch=dataset.loc[(dataset["architecture"]==dnn_architecture) &
+                                    (dataset["task"]==dnn_task) &
+                                    (dataset["dimension"]==str(dnn_dim)) &
+                                    (dataset["error_metric"]==str(error_metric))]
+    
+    
+    x=dataset_task_dim_arch.loc[:,x_column_names]
+    x=x.reset_index(drop=True)
+    y=dataset_task_dim_arch.loc[:,'y']
+    for to_categorical_column in to_categorical_column_names:
+        to_cat_column_values=np.asarray(x[to_categorical_column]).ravel()
+        dummies = pd.get_dummies(to_cat_column_values,prefix='',prefix_sep='')
+        x=x.drop(to_categorical_column,axis=1)
+        x=x.apply(pd.to_numeric)
+        x=pd.concat([x,dummies],axis=1)
+    return x,y
 
-dataset_name="brain-mri-segmentation"
-test("data/2d_mnr.csv",dim=2,dataset_name=dataset_name)
-test("data/2d_unet.csv",dim=2,dataset_name=dataset_name)
-test("data/2d_irnet.csv",dim=2,dataset_name=dataset_name)
 
-dataset_name="indian-pines"
-test("data/3d_cnn.csv",dim=3,dataset_name=dataset_name)
+n_top_hp_to_select=2
+dataset_column_names=["architecture","error_metric","task","num_features",
+                        "training_samples","n_layers","activation_function",
+                        "learning_rate","batch_size","metric","dimension","dataset","y"]
 
+x_column_names=["num_features","training_samples",
+                        "n_layers","activation_function",
+                        "learning_rate", "batch_size"]
+metric_name="metric"
+to_categorical_column_names=["activation_function"]
+
+dnn_architecture="all"
+dnn_task="prediction"
+dnn_dim=1
+training_samples=1999
+x,y=load_metadata("data/metadataset.csv",dnn_architecture,dnn_task,dnn_dim)
