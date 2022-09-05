@@ -44,6 +44,37 @@ def create_metadata(data_file_name,dataset_column_names,x_column_names,to_catego
     return x,y
 
 
+def load_metadata(data_file_name,dnn_architecture,dnn_task,dnn_dim,dataset_column_names,x_column_names,to_categorical_column_names):
+    dataset=pd.read_csv(os.path.dirname(os.path.abspath(__file__))+"/"+data_file_name,names=dataset_column_names)
+    selected_arch=""
+    
+    error_metric= 1 if dnn_dim==1 else 0
+
+    if(dnn_architecture=='all'):
+        dataset_task_dim=dataset.loc[(dataset["task"]==dnn_task) &
+                                        (dataset["dimension"]==str(dnn_dim)) &
+                                        (dataset["error_metric"]==str(error_metric))]
+        dataset_task_dim["metric"] = pd.to_numeric(dataset_task_dim["metric"])
+        dataset_task_dim=dataset_task_dim.sort_values("metric",ascending=bool(error_metric))
+        best_arch=(dataset_task_dim.head(1)).loc[:,"architecture"].values[0]
+        dataset_task_dim_arch=dataset_task_dim.loc[(dataset_task_dim["architecture"]==best_arch)]
+    else:
+        dataset_task_dim_arch=dataset.loc[(dataset["architecture"]==dnn_architecture) &
+                                    (dataset["task"]==dnn_task) &
+                                    (dataset["dimension"]==str(dnn_dim)) &
+                                    (dataset["error_metric"]==str(error_metric))]
+    
+    
+    x=dataset_task_dim_arch.loc[:,x_column_names]
+    x=x.reset_index(drop=True)
+    y=dataset_task_dim_arch.loc[:,'y']
+    for to_categorical_column in to_categorical_column_names:
+        to_cat_column_values=np.asarray(x[to_categorical_column]).ravel()
+        dummies = pd.get_dummies(to_cat_column_values,prefix='',prefix_sep='')
+        x=x.drop(to_categorical_column,axis=1)
+        x=x.apply(pd.to_numeric)
+        x=pd.concat([x,dummies],axis=1)
+    return x,y
 
 # %% [markdown]
 # ### Meta learner Functions
@@ -51,7 +82,10 @@ def create_metadata(data_file_name,dataset_column_names,x_column_names,to_catego
 # %%
 def create_metamodel(x,y):
     regr = RandomForestRegressor(random_state=0)
-    regr.fit(x,y)
+    try:
+        regr.fit(x,y)
+    except:
+        raise Exception("Architecture, Dimension or Task not found to train metalearner.")
     return regr
 
 def create_hp_space(num_features,training_samples,n_layers,learning_rate,batch_size,activation_function):
@@ -68,26 +102,35 @@ def create_hp_space(num_features,training_samples,n_layers,learning_rate,batch_s
     
 def predict_hp_space(grid_search_population,regr,to_categorical_column_names,to_categorical_values,x_column_names):
     #PREPROCESS THE DATA TO BE PREDICTED BY THE METALEARNER
-    # if (len(to_categorical_column_names)>1):
-    #     raise Exception("to_categorical_column_values >1 not supported")
-    to_categorical_values=[]
+    if (len(to_categorical_column_names)>1):
+        raise Exception("to_categorical_column_values >1 not supported")
+    # to_categorical_values=[]
     for to_categorical_column in to_categorical_column_names:
-        to_categorical_values.append(grid_search_population[to_categorical_column].unique())
+        # to_categorical_values.append(grid_search_population[to_categorical_column].unique())
         to_cat_column_values=np.asarray(grid_search_population[to_categorical_column]).ravel()
         dummies = pd.get_dummies(to_cat_column_values,prefix='',prefix_sep='')
         x_test=pd.concat([grid_search_population[x_column_names],dummies],axis=1)
         x_test=x_test.drop(to_categorical_column,axis=1)
     
     #PREDICTION OF THE HYPERPARAMETER SPACE
-    predictions= pd.DataFrame(regr.predict(x_test))
     x_test_predicted=x_test.loc[:]
 
-    #REVERSE THE CATEGORICAL OF THE ACTIVATION FUNCTION
-    for to_categorical_column,to_categorical_value in to_categorical_column_names,to_categorical_values:
-        x_test_predicted[to_categorical_column]=x_test_predicted[to_categorical_value].idxmax(axis=1)
-        x_test_predicted=x_test_predicted.drop(to_categorical_value,axis=1)
+    # for column_name_i in range(to_categorical_column_names):
+    #     x_test_to_predict[to_categorical_column_names[column_name_i]]=x_test_to_predict[to_categorical_values].idxmax(axis=1)
+    #     x_test_predicted=x_test_predicted.drop(to_categorical_value,axis=1)
+
+    # #REVERSE THE CATEGORICAL OF THE ACTIVATION FUNCTION
+    # for to_categorical_column,to_categorical_value in to_categorical_column_names,to_categorical_values:
+    #     x_test_predicted[to_categorical_column]=x_test_predicted[to_categorical_value].idxmax(axis=1)
+    #     x_test_predicted=x_test_predicted.drop(to_categorical_value,axis=1)
 
     x_test_predicted["y"]=pd.DataFrame(regr.predict(x_test))
+    
+    
+    # test2=x_test.loc[:,[to_categorical_values[:]]].idxmax(axis=1)
+    
+    x_test_predicted["activation_function"]=(x_test_predicted.loc[:,to_categorical_values]).idxmax(axis=1)
+    x_test_predicted=x_test_predicted.drop(to_categorical_values,axis=1)
     x_test_predicted=x_test_predicted.sort_values("y",ascending=False)
     return x_test_predicted
     
@@ -140,20 +183,22 @@ def get_top_hp_combination(n_top_hp_to_select,x_test_predicted):
 
 # %%
 
-#DATASET NAMES    
-def meta_learner(n_top_hp_to_select,dataset_column_names,x_column_names,metric_name,to_categorical_column_names,data_file_name,
+
+def meta_learner(dnn_architecture,dnn_task,dnn_dim,n_top_hp_to_select,dataset_column_names,x_column_names,to_categorical_column_names,data_file_name,
                 num_features,training_samples,n_layers,learning_rate,batch_size,activation_function):
     
-
     
-    x,y=create_metadata(data_file_name,dataset_column_names,x_column_names,to_categorical_column_names,metric_name,error_metric=True)                              
-    
+    # x,y=create_metadata(data_file_name,dataset_column_names,x_column_names,to_categorical_column_names,metric_name,error_metric=True)                              
+    x,y=load_metadata(data_file_name,dnn_architecture,dnn_task,dnn_dim,dataset_column_names,x_column_names,to_categorical_column_names)
+    print("Metadata loaded.")
     model=create_metamodel(x,y)
+    print("Meta model created.")
     gs_population=create_hp_space(num_features,training_samples,n_layers,learning_rate,batch_size,activation_function)
-    
+    print("HP space created.")
     predictions=predict_hp_space(gs_population,model,to_categorical_column_names,activation_function,x_column_names)
-
+    print("HP space predicted")
     top_lr,top_bz,top_layers,top_af,finish_order=get_top_hp_combination(n_top_hp_to_select,predictions)
+    print("Top combination created.")
     return top_lr,top_bz,top_layers,top_af,finish_order
 
 
@@ -161,85 +206,41 @@ def meta_learner(n_top_hp_to_select,dataset_column_names,x_column_names,metric_n
 # %%
 
 
-def test_metalearner(data_file_name,n_top_hp_to_select,dataset_column_names,x_column_names,metric_name,training_samples):
+def test_metalearner():
     to_categorical_column_names=["activation_function"]
     
-    max_epochs=10
-    patience_epochs=2
-    metric_to_evaluate="balanced_accuracy"
-    sort_order_desc=True
-    architecture_name="irnet"
-    problem_type="prediction"
-    #FILES NAME
-    hp_dataset_name="test_hp_dataset.csv"
-    weights_folder="data/weights/"
+
+    n_top_hp_to_select=2
+    dataset_column_names=["architecture","error_metric","task","num_features",
+                            "training_samples","n_layers","activation_function",
+                            "learning_rate","batch_size","metric","dimension","dataset","y"]
+
+    x_column_names=["num_features","training_samples",
+                            "n_layers","activation_function",
+                            "learning_rate", "batch_size"]
+
     #HYPERPARAMETERS TO EVALUATE
     num_features=[29]
-    training_and_validation_samples=99999
     n_layers=[1,2,3]
     learning_rate=[0.01,0.001,0.0001,0.00001]
     batch_size=[16,32,64,128]
     activation_function=['relu','elu','tanh','sigmoid']
 
-    #GA configuration
-    all_hyperparams=[n_layers,learning_rate,batch_size,activation_function]
-    population_size=6
-    sel_prt=2
-    rand_prt=2
-    generations=2
-    
-    meta_learner(n_top_hp_to_select,dataset_column_names,x_column_names,metric_name,to_categorical_column_names,data_file_name,
+
+    dnn_architecture="CNN"
+    dnn_task="segmentation"
+    dnn_dim=3
+    training_samples=1999
+    data_file_name="data/metadataset.csv"
+
+    to_categorical_column_names=["activation_function"]
+
+    meta_learner(dnn_architecture,dnn_task,dnn_dim,n_top_hp_to_select,dataset_column_names,x_column_names,to_categorical_column_names,data_file_name,
                 num_features,training_samples,n_layers,learning_rate,batch_size,activation_function)
     return 1
     
 # %%
 
-def load_metadata(data_file_name,dnn_architecture,dnn_task,dnn_dim):
-    dataset=pd.read_csv(os.path.dirname(os.path.abspath(__file__))+"/"+data_file_name,names=dataset_column_names)
-    selected_arch=""
-    
-    error_metric= 1 if dnn_dim==1 else 0
-
-    if(dnn_architecture=='all'):
-        dataset_task_dim=dataset.loc[(dataset["task"]==dnn_task) &
-                                        (dataset["dimension"]==str(dnn_dim)) &
-                                        (dataset["error_metric"]==str(error_metric))]
-        dataset_task_dim["metric"] = pd.to_numeric(dataset_task_dim["metric"])
-        dataset_task_dim=dataset_task_dim.sort_values("metric",ascending=bool(error_metric))
-        best_arch=(dataset_task_dim.head(1)).loc[:,"architecture"].values[0]
-        dataset_task_dim_arch=dataset_task_dim.loc[(dataset_task_dim["architecture"]==best_arch)]
-    else:
-        dataset_task_dim_arch=dataset.loc[(dataset["architecture"]==dnn_architecture) &
-                                    (dataset["task"]==dnn_task) &
-                                    (dataset["dimension"]==str(dnn_dim)) &
-                                    (dataset["error_metric"]==str(error_metric))]
-    
-    
-    x=dataset_task_dim_arch.loc[:,x_column_names]
-    x=x.reset_index(drop=True)
-    y=dataset_task_dim_arch.loc[:,'y']
-    for to_categorical_column in to_categorical_column_names:
-        to_cat_column_values=np.asarray(x[to_categorical_column]).ravel()
-        dummies = pd.get_dummies(to_cat_column_values,prefix='',prefix_sep='')
-        x=x.drop(to_categorical_column,axis=1)
-        x=x.apply(pd.to_numeric)
-        x=pd.concat([x,dummies],axis=1)
-    return x,y
 
 
-n_top_hp_to_select=2
-dataset_column_names=["architecture","error_metric","task","num_features",
-                        "training_samples","n_layers","activation_function",
-                        "learning_rate","batch_size","metric","dimension","dataset","y"]
-
-x_column_names=["num_features","training_samples",
-                        "n_layers","activation_function",
-                        "learning_rate", "batch_size"]
-metric_name="metric"
-to_categorical_column_names=["activation_function"]
-
-dnn_architecture="all"
-dnn_task="prediction"
-dnn_dim=1
-training_samples=1999
-x,y=load_metadata("data/metadataset.csv",dnn_architecture,dnn_task,dnn_dim)
+test_metalearner()
