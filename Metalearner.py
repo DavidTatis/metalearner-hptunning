@@ -55,10 +55,12 @@ def load_metadata(data_file_name,dnn_architecture,dnn_task,dnn_dim,dataset_colum
                                         (dataset["dimension"]==str(dnn_dim)) &
                                         (dataset["error_metric"]==str(error_metric))]
         dataset_task_dim["metric"] = pd.to_numeric(dataset_task_dim["metric"])
-        dataset_task_dim=dataset_task_dim.sort_values("metric",ascending=bool(error_metric))
-        best_arch=(dataset_task_dim.head(1)).loc[:,"architecture"].values[0]
+        dataset_task_dim=dataset_task_dim.sort_values("metric",ascending=bool(error_metric)).reset_index(drop=True)
+        best_arch=dataset_task_dim.loc[0,"architecture"]
+        selected_arch=best_arch
         dataset_task_dim_arch=dataset_task_dim.loc[(dataset_task_dim["architecture"]==best_arch)]
     else:
+        selected_arch=dnn_architecture
         dataset_task_dim_arch=dataset.loc[(dataset["architecture"]==dnn_architecture) &
                                     (dataset["task"]==dnn_task) &
                                     (dataset["dimension"]==str(dnn_dim)) &
@@ -74,7 +76,7 @@ def load_metadata(data_file_name,dnn_architecture,dnn_task,dnn_dim,dataset_colum
         x=x.drop(to_categorical_column,axis=1)
         x=x.apply(pd.to_numeric)
         x=pd.concat([x,dummies],axis=1)
-    return x,y
+    return x,y,selected_arch
 
 # %% [markdown]
 # ### Meta learner Functions
@@ -90,7 +92,7 @@ def create_metamodel(x,y):
 
 def create_hp_space(num_features,training_samples,n_layers,learning_rate,batch_size,activation_function):
     #CREATE THE HYPERPARAMETER SPACE
-    dict_all_hyperparams=dict(num_features=num_features,
+    dict_all_hyperparams=dict(num_features=[num_features],
                                 training_samples=[training_samples],
                                 n_layers=n_layers,
                                 learning_rate=learning_rate,
@@ -112,23 +114,9 @@ def predict_hp_space(grid_search_population,regr,to_categorical_column_names,to_
         x_test=pd.concat([grid_search_population[x_column_names],dummies],axis=1)
         x_test=x_test.drop(to_categorical_column,axis=1)
     
-    #PREDICTION OF THE HYPERPARAMETER SPACE
+    
     x_test_predicted=x_test.loc[:]
-
-    # for column_name_i in range(to_categorical_column_names):
-    #     x_test_to_predict[to_categorical_column_names[column_name_i]]=x_test_to_predict[to_categorical_values].idxmax(axis=1)
-    #     x_test_predicted=x_test_predicted.drop(to_categorical_value,axis=1)
-
-    # #REVERSE THE CATEGORICAL OF THE ACTIVATION FUNCTION
-    # for to_categorical_column,to_categorical_value in to_categorical_column_names,to_categorical_values:
-    #     x_test_predicted[to_categorical_column]=x_test_predicted[to_categorical_value].idxmax(axis=1)
-    #     x_test_predicted=x_test_predicted.drop(to_categorical_value,axis=1)
-
     x_test_predicted["y"]=pd.DataFrame(regr.predict(x_test))
-    
-    
-    # test2=x_test.loc[:,[to_categorical_values[:]]].idxmax(axis=1)
-    
     x_test_predicted["activation_function"]=(x_test_predicted.loc[:,to_categorical_values]).idxmax(axis=1)
     x_test_predicted=x_test_predicted.drop(to_categorical_values,axis=1)
     x_test_predicted=x_test_predicted.sort_values("y",ascending=False)
@@ -189,7 +177,7 @@ def meta_learner(dnn_architecture,dnn_task,dnn_dim,n_top_hp_to_select,dataset_co
     
     
     # x,y=create_metadata(data_file_name,dataset_column_names,x_column_names,to_categorical_column_names,metric_name,error_metric=True)                              
-    x,y=load_metadata(data_file_name,dnn_architecture,dnn_task,dnn_dim,dataset_column_names,x_column_names,to_categorical_column_names)
+    x,y,selected_arch=load_metadata(data_file_name,dnn_architecture,dnn_task,dnn_dim,dataset_column_names,x_column_names,to_categorical_column_names)
     print("Metadata loaded.")
     model=create_metamodel(x,y)
     print("Meta model created.")
@@ -199,7 +187,7 @@ def meta_learner(dnn_architecture,dnn_task,dnn_dim,n_top_hp_to_select,dataset_co
     print("HP space predicted")
     top_lr,top_bz,top_layers,top_af,finish_order=get_top_hp_combination(n_top_hp_to_select,predictions)
     print("Top combination created.")
-    return top_lr,top_bz,top_layers,top_af,finish_order
+    return top_lr,top_bz,top_layers,top_af,finish_order,selected_arch
 
 
 
@@ -227,7 +215,7 @@ def test_metalearner():
     activation_function=['relu','elu','tanh','sigmoid']
 
 
-    dnn_architecture="CNN"
+    dnn_architecture="all"
     dnn_task="segmentation"
     dnn_dim=3
     training_samples=1999
@@ -243,4 +231,4 @@ def test_metalearner():
 
 
 
-test_metalearner()
+# test_metalearner()
