@@ -2,7 +2,6 @@
 # Libreries
 
 # %%
-
 import numpy as np # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 import csv
@@ -114,11 +113,11 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
   if(metric_to_evaluate=='balanced_accuracy'): metric_test=balanced_accuracy_score(np.argmax(y_test,axis=1),prediction)
   
   #SAVE THE WEIGHTS
-  weights_name="{}-{}-{}-{}".format(n_layers,input_shape,activation_function,learning_rate)
-  model.save(os.path.dirname(os.path.abspath(__file__))+"/data/weights/"+weights_name+".h5")
+  weights_name="{}-{}-{}-{}".format(n_layers,batch_size,activation_function,learning_rate)
+  # model.save(os.path.dirname(os.path.abspath(__file__))+"/data/weights/"+weights_name+".h5")
 
   #SAVE THE HYPERPARAMS AND THE METRIC
-  with open(hp_dataset_name, mode='a+') as hp_dataset:
+  with open(os.path.dirname(os.path.abspath(__file__))+"/data/"+hp_dataset_name, mode='a+') as hp_dataset:
       hp_dataset_writer=csv.writer(hp_dataset,delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
       hp_dataset_writer.writerow([selected_arch,
                                   error_metric,
@@ -143,7 +142,8 @@ def selection(evaluated_hparams,sel_prt,rand_prt,population, metric_to_evaluate,
     if(sel_prt+rand_prt>=len(population[0])):
       print("WARNING: Selections are bigger thant current population")
       print("WARNING: Random selection may not be taken")
-
+    if len(population[0])<=2:
+      raise Exception("POPULATION <= 2")
     top_selection=[]
     for i in range(sel_prt):
       top_selection.insert(len(top_selection),sorted_evaluated_params[i]['hparam'])
@@ -205,10 +205,11 @@ def crossover(p1,p2,population):
 # %%
 
 # MUTATION
-def mutation(population,selected):
+def mutation(new_population,selected):
     selected_hyperparam=randrange(len(all_hyperparams))
     selected_value=randrange(len(all_hyperparams[selected_hyperparam]))
-    population[selected_hyperparam][selected]=all_hyperparams[selected_hyperparam][selected_value]
+    new_population[selected_hyperparam][selected]=all_hyperparams[selected_hyperparam][selected_value]
+    return new_population
     
 
 # %%
@@ -223,7 +224,7 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
                                                                                                 activation_function=activation_function)
     
     population=[potential_n_layers,potential_learning_rate,potential_batch_size,potential_activation_function]
-    print("Initial population",population)
+    total_population=population
     final_hyperparam=[]
     # evaluate hyperparams
     for generation in range(generations):
@@ -231,9 +232,9 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
         for i in range(population_size):
             #input_shape,n_layers,activation_function,learning_rate,batch_size,hp_dataset_name,max_epochs,patience_epochs,metric_to_evaluate
             metric=evaluate_fitness(input_shape=input_shape,
-                                    n_layers=population[0][i],
-                                    learning_rate=population[1][i],
-                                    batch_size=population[2][i],
+                                    n_layers=int(population[0][i]),
+                                    learning_rate=float(population[1][i]),
+                                    batch_size=int(population[2][i]),
                                     activation_function=population[3][i],
                                     hp_dataset_name=hp_dataset_name,
                                     max_epochs=max_epochs,
@@ -271,13 +272,35 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
 
         # MUTATION
         selected_to_mutate=randrange(len(top_selection)+len(rand_selection)+len(child_hyperparams[0]))
-        mutation(new_population,selected_to_mutate)
+        new_population=mutation(new_population,selected_to_mutate)
 
+        
         if (generation+1)==generations:
             for  hyperparam in  population:
                 final_hyperparam.insert(len(population),hyperparam[top_selection[0]])
 
-        population=new_population
+        
+        population=[[],[],[],[]]
+        for i in range(len(new_population[0])):
+          insert=True
+          for j in range(len(total_population[0])):
+            if(new_population[0][i]==total_population[0][j] and
+              new_population[1][i]==total_population[1][j] and
+              new_population[2][i]==total_population[2][j] and
+              new_population[3][i]==total_population[3][j]):
+                insert=False
+          if insert:
+            population[0].insert(0,new_population[0][i])
+            population[1].insert(0,new_population[1][i])
+            population[2].insert(0,new_population[2][i])
+            population[3].insert(0,new_population[3][i])
+
+        population=np.unique(population, axis=1)
+        total_population[0]=[*total_population[0],*population[0]]
+        total_population[1]=[*total_population[1],*population[1]]
+        total_population[2]=[*total_population[2],*population[2]]
+        total_population[3]=[*total_population[3],*population[3]]
+
         population_size=len(population[0])
 
     return evaluated_hparams,sorted(evaluated_hparams,key=itemgetter('metric'),reverse=sort_order_desc)[0]['metric'],final_hyperparam
@@ -289,8 +312,10 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
 
 
 #FILES NAME
-hp_dataset_name="test_hp_dataset.csv"
+hp_dataset_name="metadata_bankruptcy_no-ml.csv"
 weights_folder="data/weights/"
+data_file_name="data/metadataset.csv"
+
 #HYPERPARAMETERS TO EVALUATE
 num_features=x_train.shape[1]
 training_samples=x_train.shape[0]
@@ -303,17 +328,15 @@ activation_function=['relu','elu','tanh','sigmoid']
 
 # METALEARNER
 to_categorical_column_names=["activation_function"] 
-n_top_hp_to_select=2
 dataset_column_names=["architecture","error_metric","task","num_features",
                     "training_samples","n_layers","activation_function",
                     "learning_rate","batch_size","metric","dimension","dataset","y"]
-
 x_column_names=["num_features","training_samples",
                     "n_layers","activation_function",
                     "learning_rate", "batch_size"]
-
 to_categorical_column_names=["activation_function"]
-data_file_name="data/metadataset.csv"
+
+n_top_hp_to_select=2
 dnn_architecture="all"
 dnn_task="prediction"
 dnn_dim=1
@@ -326,8 +349,8 @@ print(selected_arch,finish_order)
 
 
 input_shape=x_train.shape[1]
-max_epochs=2
-patience_epochs=2
+max_epochs=200
+patience_epochs=20
 metric_to_evaluate="mae"
 error_metric=1
 sort_order_desc=True
@@ -336,12 +359,12 @@ sort_order_desc=True
 
 #GA configuration
 all_hyperparams=[n_layers,learning_rate,batch_size,activation_function]
-population_size=4
+population_size=6
 sel_prt=2
 rand_prt=1
 generations=3
 
-use_metalearner=True
+use_metalearner=False
 
 all_ga,top_ga, hparams_ga=genetic_algorithm_main(use_metalearner,
                                                 population_size,
