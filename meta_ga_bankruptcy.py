@@ -136,9 +136,12 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
 
 
 # %%
-def selection(evaluated_hparams,sel_prt,rand_prt,population, metric_to_evaluate,sort_order_desc):
-    
-    sorted_evaluated_params=sorted(evaluated_hparams,key=itemgetter('metric'),reverse=True)
+def selection(evaluated_hparams,sel_prt,rand_prt,population):
+    if error_metric==True:
+      order_desc=False
+    else:
+      order_desc=True
+    sorted_evaluated_params=sorted(evaluated_hparams,key=itemgetter('metric'),reverse=order_desc)
     if(sel_prt+rand_prt>=len(population[0])):
       print("WARNING: Selections are bigger thant current population")
       print("WARNING: Random selection may not be taken")
@@ -243,7 +246,7 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
             evaluated_hparams.insert(0,{"hparam":i,"metric":metric})
 
         #SELECTION
-        top_selection,rand_selection=selection(evaluated_hparams,sel_prt,rand_prt,population,metric_to_evaluate,sort_order_desc)
+        top_selection,rand_selection=selection(evaluated_hparams,sel_prt,rand_prt,population)
 
 
         # CROSS-OVER
@@ -350,7 +353,7 @@ print(selected_arch,finish_order)
 
 input_shape=x_train.shape[1]
 max_epochs=200
-patience_epochs=20
+patience_epochs=40
 metric_to_evaluate="mae"
 error_metric=1
 sort_order_desc=True
