@@ -33,7 +33,7 @@ import pathlib
 import pickle
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 initializer = tf.keras.initializers.GlorotUniform(seed=2)
-random.seed(2)
+random.seed(22)
 
 # %%
 import sys
@@ -137,7 +137,7 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
 
 # %%
 def selection(evaluated_hparams,sel_prt,rand_prt,population):
-    if error_metric==True:
+    if error_metric==1:
       order_desc=False
     else:
       order_desc=True
@@ -145,13 +145,17 @@ def selection(evaluated_hparams,sel_prt,rand_prt,population):
     if(sel_prt+rand_prt>=len(population[0])):
       print("WARNING: Selections are bigger thant current population")
       print("WARNING: Random selection may not be taken")
-    if len(population[0])<=2:
+    if len(population[0])<2:
       raise Exception("POPULATION <= 2")
     top_selection=[]
     for i in range(sel_prt):
       top_selection.insert(len(top_selection),sorted_evaluated_params[i]['hparam'])
 
     rand_selection=[]
+    if len(population[0])==2:
+      print("WARNING: no random selection because population len == 2")
+      return top_selection,rand_selection
+    
     i=0
     while(i < rand_prt):
       if(len(rand_selection)+len(top_selection)>=len(population[0])):
@@ -217,7 +221,7 @@ def mutation(new_population,selected):
 
 # %%
 # MAIN
-def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_dataset_name,max_epochs,patience_epochs,metric_to_evaluate,sort_order_desc):
+def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_dataset_name,max_epochs,patience_epochs,metric_to_evaluate):
    
     potential_n_layers,potential_learning_rate,potential_batch_size,potential_activation_function=initialize_population(use_metalearner,
                                                                                                 population_size=population_size,
@@ -297,16 +301,24 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
             population[1].insert(0,new_population[1][i])
             population[2].insert(0,new_population[2][i])
             population[3].insert(0,new_population[3][i])
+            total_population[0].insert(0,new_population[0][i])
+            total_population[1].insert(0,new_population[1][i])
+            total_population[2].insert(0,new_population[2][i])
+            total_population[3].insert(0,new_population[3][i])
 
-        population=np.unique(population, axis=1)
-        total_population[0]=[*total_population[0],*population[0]]
-        total_population[1]=[*total_population[1],*population[1]]
-        total_population[2]=[*total_population[2],*population[2]]
-        total_population[3]=[*total_population[3],*population[3]]
+        # population=np.unique(population, axis=1)
+        # total_population[0]=[*total_population[0],*population[0]]
+        # total_population[1]=[*total_population[1],*population[1]]
+        # total_population[2]=[*total_population[2],*population[2]]
+        # total_population[3]=[*total_population[3],*population[3]]
 
         population_size=len(population[0])
-
-    return evaluated_hparams,sorted(evaluated_hparams,key=itemgetter('metric'),reverse=sort_order_desc)[0]['metric'],final_hyperparam
+    
+    if error_metric==True:
+      order_desc=False
+    else:
+      order_desc=True
+    return evaluated_hparams,sorted(evaluated_hparams,key=itemgetter('metric'),reverse=order_desc)[0]['metric'],final_hyperparam
     
                 
 
@@ -315,7 +327,7 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
 
 
 #FILES NAME
-hp_dataset_name="metadata_bankruptcy_no-ml.csv"
+hp_dataset_name="metadata_bankruptcy.csv"
 weights_folder="data/weights/"
 data_file_name="data/metadataset.csv"
 
@@ -324,6 +336,7 @@ num_features=x_train.shape[1]
 training_samples=x_train.shape[0]
 training_and_validation_samples=len(x_train)
 n_layers=[1,2,3]
+
 learning_rate=[0.01,0.001,0.0001,0.00001]
 batch_size=[16,32,64,128]
 activation_function=['relu','elu','tanh','sigmoid']
@@ -356,7 +369,7 @@ max_epochs=200
 patience_epochs=40
 metric_to_evaluate="mae"
 error_metric=1
-sort_order_desc=True
+
 
 
 
@@ -367,7 +380,7 @@ sel_prt=2
 rand_prt=1
 generations=3
 
-use_metalearner=False
+use_metalearner=True
 
 all_ga,top_ga, hparams_ga=genetic_algorithm_main(use_metalearner,
                                                 population_size,
@@ -375,8 +388,7 @@ all_ga,top_ga, hparams_ga=genetic_algorithm_main(use_metalearner,
                                                 hp_dataset_name,
                                                 max_epochs,
                                                 patience_epochs,
-                                                metric_to_evaluate,
-                                                sort_order_desc)
+                                                metric_to_evaluate)
 
 # %%
 
