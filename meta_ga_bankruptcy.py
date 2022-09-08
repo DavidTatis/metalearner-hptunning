@@ -21,7 +21,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint,EarlyStopping
 
 from sklearn.model_selection import GridSearchCV,ParameterGrid, ParameterSampler,train_test_split
 from sklearn.preprocessing import RobustScaler
-from sklearn.metrics import mean_absolute_error,accuracy_score, balanced_accuracy_score
+from sklearn.metrics import mean_absolute_error,accuracy_score, balanced_accuracy_score,recall_score
 
 import random
 from random import random,randrange
@@ -85,8 +85,20 @@ def initialize_population(use_metalearner,population_size,n_layers,learning_rate
 
 # %%
 #EVALUATE FITNESS
-def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batch_size,hp_dataset_name,max_epochs,patience_epochs,metric_to_evaluate):
+def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batch_size,hp_dataset_name,max_epochs,patience_epochs,metric_to_evaluate,total_population):
+  
+  #CHECK IF THE HPS HAVE BEEN USED SO RETURN THE METRIC WITHOUT TRAINING AGAIN
+  for j in range(len(total_population[0])):
+    if (n_layers==total_population[0][j] and
+        learning_rate==total_population[1][j] and
+        batch_size==total_population[2][j] and
+        activation_function==total_population[3][j]):
+        return total_population[4][j]
+
+  
   #CREATE MODEL
+  n_layers,activation_function,learning_rate,batch_size
+
   if(selected_arch=="irnet"):
     model=irnet_model(input_shape,n_layers,activation_function,learning_rate) 
   if(selected_arch=="fcunet"):
@@ -111,7 +123,7 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
   if(metric_to_evaluate=='mae'): metric_test=mean_absolute_error(np.argmax(y_test,axis=1),prediction)
   if(metric_to_evaluate=='accuracy'): metric_test=accuracy_score(np.argmax(y_test,axis=1),prediction)
   if(metric_to_evaluate=='balanced_accuracy'): metric_test=balanced_accuracy_score(np.argmax(y_test,axis=1),prediction)
-  
+  if(metric_to_evaluate=='recall'): metric_test=recall_score(np.argmax(y_test,axis=1),prediction)
   #SAVE THE WEIGHTS
   weights_name="{}-{}-{}-{}".format(n_layers,batch_size,activation_function,learning_rate)
   # model.save(os.path.dirname(os.path.abspath(__file__))+"/data/weights/"+weights_name+".h5")
@@ -132,6 +144,13 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
                                   str(len(history.history['loss'])),
                                   end_time-start_time,
                                   metric_test])
+
+  total_population[0].insert(len(total_population[0]),n_layers)
+  total_population[1].insert(len(total_population[1]),learning_rate)
+  total_population[2].insert(len(total_population[2]),batch_size)
+  total_population[3].insert(len(total_population[3]),activation_function)
+  total_population[4].insert(len(total_population[4]),metric_test)
+
   return metric_test
 
 
@@ -231,7 +250,7 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
                                                                                                 activation_function=activation_function)
     
     population=[potential_n_layers,potential_learning_rate,potential_batch_size,potential_activation_function]
-    total_population=population
+    total_population=[[],[],[],[],[]] # n_laters, learning_rate, batch_size, activation_function, metric
     final_hyperparam=[]
     # evaluate hyperparams
     for generation in range(generations):
@@ -246,12 +265,13 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
                                     hp_dataset_name=hp_dataset_name,
                                     max_epochs=max_epochs,
                                     patience_epochs=patience_epochs,
-                                    metric_to_evaluate=metric_to_evaluate)
+                                    metric_to_evaluate=metric_to_evaluate,
+                                    total_population=total_population)
             evaluated_hparams.insert(0,{"hparam":i,"metric":metric})
 
         #SELECTION
         top_selection,rand_selection=selection(evaluated_hparams,sel_prt,rand_prt,population)
-
+        
 
         # CROSS-OVER
         p1,p2=random.sample(range(0,len(top_selection)+len(rand_selection)),2)
@@ -286,32 +306,7 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
             for  hyperparam in  population:
                 final_hyperparam.insert(len(population),hyperparam[top_selection[0]])
 
-        
-        population=[[],[],[],[]]
-        for i in range(len(new_population[0])):
-          insert=True
-          for j in range(len(total_population[0])):
-            if(new_population[0][i]==total_population[0][j] and
-              new_population[1][i]==total_population[1][j] and
-              new_population[2][i]==total_population[2][j] and
-              new_population[3][i]==total_population[3][j]):
-                insert=False
-          if insert:
-            population[0].insert(0,new_population[0][i])
-            population[1].insert(0,new_population[1][i])
-            population[2].insert(0,new_population[2][i])
-            population[3].insert(0,new_population[3][i])
-            total_population[0].insert(0,new_population[0][i])
-            total_population[1].insert(0,new_population[1][i])
-            total_population[2].insert(0,new_population[2][i])
-            total_population[3].insert(0,new_population[3][i])
-
-        # population=np.unique(population, axis=1)
-        # total_population[0]=[*total_population[0],*population[0]]
-        # total_population[1]=[*total_population[1],*population[1]]
-        # total_population[2]=[*total_population[2],*population[2]]
-        # total_population[3]=[*total_population[3],*population[3]]
-
+        population=new_population
         population_size=len(population[0])
     
     if error_metric==True:
@@ -327,7 +322,7 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
 
 
 #FILES NAME
-hp_dataset_name="metadata_bankruptcy.csv"
+hp_dataset_name="metadata_bankruptcy_no-ml.csv"
 weights_folder="data/weights/"
 data_file_name="data/metadataset.csv"
 
@@ -354,6 +349,7 @@ to_categorical_column_names=["activation_function"]
 
 n_top_hp_to_select=2
 dnn_architecture="all"
+
 dnn_task="prediction"
 dnn_dim=1
 
@@ -380,7 +376,7 @@ sel_prt=2
 rand_prt=1
 generations=3
 
-use_metalearner=True
+use_metalearner=False
 
 all_ga,top_ga, hparams_ga=genetic_algorithm_main(use_metalearner,
                                                 population_size,
