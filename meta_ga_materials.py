@@ -32,7 +32,7 @@ import random
 import os
 import pathlib
 import pickle
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 initializer = tf.keras.initializers.GlorotUniform(seed=2)
 random.seed(22)
 
@@ -46,10 +46,10 @@ from Metalearner import meta_learner
 
 
 
-x_train = genfromtxt(os.path.dirname(os.path.abspath(__file__))+"data/materials/train_X.csv", delimiter=',')
-y_train = genfromtxt(os.path.dirname(os.path.abspath(__file__))+"data/materials/train_Y.csv", delimiter=',')
-x_test = genfromtxt(os.path.dirname(os.path.abspath(__file__))+"data/materials/test_X.csv", delimiter=',')
-y_test = genfromtxt(os.path.dirname(os.path.abspath(__file__))+"data/materials/test_y.csv", delimiter=',')
+x_train = genfromtxt(os.path.dirname(os.path.abspath(__file__))+"/data/materials/train_X.csv", delimiter=',')
+y_train = genfromtxt(os.path.dirname(os.path.abspath(__file__))+"/data/materials/train_Y.csv", delimiter=',')
+x_test = genfromtxt(os.path.dirname(os.path.abspath(__file__))+"/data/materials/test_X.csv", delimiter=',')
+y_test = genfromtxt(os.path.dirname(os.path.abspath(__file__))+"/data/materials/test_y.csv", delimiter=',')
 
 
 
@@ -106,13 +106,11 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
 
   #EVALUATE MODEL
   prediction=model.predict(x_test)
-  if(len(prediction.transpose())!=len(prediction)): # IF RESULT IS ONE-HOT ENCODED, CHANGE IT.
-    prediction=np.argmax(prediction,axis=1)
+  
 
   metric_test=0
-  if(metric_to_evaluate=='mae'): metric_test=mean_absolute_error(np.argmax(y_test,axis=1),prediction)
-  if(metric_to_evaluate=='accuracy'): metric_test=accuracy_score(np.argmax(y_test,axis=1),prediction)
-  if(metric_to_evaluate=='balanced_accuracy'): metric_test=balanced_accuracy_score(np.argmax(y_test,axis=1),prediction)
+  if(metric_to_evaluate=='mae'): metric_test=mean_absolute_error(y_test,prediction)
+  
   
   #SAVE THE WEIGHTS
   weights_name="{}-{}-{}-{}".format(n_layers,batch_size,activation_function,learning_rate)
@@ -312,7 +310,7 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
 
 
 #FILES NAME
-hp_dataset_name="metadata_materials_ml.csv"
+hp_dataset_name="metadata_materials_no-ml.csv"
 weights_folder="data/weights/"
 data_file_name="data/metadataset.csv"
 
@@ -365,7 +363,7 @@ sel_prt=2
 rand_prt=1
 generations=3
 
-use_metalearner=True
+use_metalearner=False
 
 all_ga,top_ga, hparams_ga=genetic_algorithm_main(use_metalearner,
                                                 population_size,
