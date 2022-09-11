@@ -129,7 +129,12 @@ class OxfordPets(keras.utils.Sequence):
 # =============
 
 
-
+def iou(y_true, y_pred):
+    smooth=100
+    intersection = K.sum(y_true * y_pred)
+    sum_ = K.sum(y_true + y_pred)
+    jac = (intersection + smooth) / (sum_ - intersection + smooth)
+    return jac
 
 
 
@@ -177,36 +182,36 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
   
 
 # Split our img paths into a training and a validation set
-  val_samples = 1000
+  val_samples = 500
   random.Random(1337).shuffle(input_img_paths)
   random.Random(1337).shuffle(target_img_paths)
   train_input_img_paths = input_img_paths[:-val_samples]
   train_target_img_paths = target_img_paths[:-val_samples]
   val_input_img_paths = input_img_paths[-val_samples:]
   val_target_img_paths = target_img_paths[-val_samples:]
-  test_samples=500
-  val_samples=val_samples-test_samples
+  # test_samples=500
+  # val_samples=val_samples-test_samples
 
-  val_input_img_paths=val_input_img_paths[0:500]
-  val_target_img_paths=val_target_img_paths[0:500]
+  # val_input_img_paths=val_input_img_paths[0:500]
+  # val_target_img_paths=val_target_img_paths[0:500]
 
-  test_input_img_paths=val_input_img_paths[500:]
-  test_target_img_paths=val_target_img_paths[500:]
+  # test_input_img_paths=val_input_img_paths[500:]
+  # test_target_img_paths=val_target_img_paths[500:]
 
   # Instantiate data Sequences for each split
   train_gen = OxfordPets(
       batch_size, img_size, train_input_img_paths, train_target_img_paths
   )
   val_gen = OxfordPets(batch_size, img_size, val_input_img_paths, val_target_img_paths)
-  test_gen = OxfordPets(batch_size, img_size, test_input_img_paths, test_target_img_paths)
+  # test_gen = OxfordPets(batch_size, img_size, test_input_img_paths, test_target_img_paths)
   
   start_time= timeit.default_timer()
-  history = model.fit(train_gen, epochs=max_epochs, validation_data=val_gen, callbacks=[EarlyStopping(patience=patience_epochs)])
+  history = model.fit(train_gen, epochs=max_epochs,callbacks=[EarlyStopping(patience=patience_epochs)])
   end_time = timeit.default_timer()
 
   
-  results = model.evaluate(test_gen)
-  print("Test IOU: ",results[1])
+  results = model.predict(val_gen)
+  print("Test IOU: ",results)
   metric_test=results[1]
   #SAVE THE WEIGHTS
   weights_name="{}-{}-{}-{}".format(n_layers,batch_size,activation_function,learning_rate)
@@ -442,8 +447,8 @@ print(selected_arch)
 
 
 input_shape=(160,160,3)
-max_epochs=10
-patience_epochs=5
+max_epochs=200
+patience_epochs=20
 metric_to_evaluate="iou"
 error_metric=0
 
