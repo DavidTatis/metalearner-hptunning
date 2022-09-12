@@ -9,27 +9,6 @@ from tensorflow.keras import layers
 import tensorflow as tf
 
 
-def dice_coef(y_true, y_pred):
-    smooth=100
-    y_truef=K.flatten(y_true)
-    y_predf=K.flatten(y_pred)
-    And=K.sum(y_truef* y_predf)
-    return((2* And + smooth) / (K.sum(y_truef) + K.sum(y_predf) + smooth))
-
-def dice_coef_loss(y_true, y_pred):
-    return -dice_coef(y_true, y_pred)
-
-def dice_loss(y_true, y_pred):
-    numerator = tf.reduce_sum(y_true * y_pred)
-    denominator = tf.reduce_sum(y_true * y_true) + tf.reduce_sum(y_pred * y_pred) - tf.reduce_sum(y_true * y_pred)
-
-    return 1 - numerator / denominator
-def iou(y_true, y_pred):
-    smooth=100
-    intersection = K.sum(y_true * y_pred)
-    sum_ = K.sum(y_true + y_pred)
-    jac = (intersection + smooth) / (sum_ - intersection + smooth)
-    return jac
 
 def unet_model(input_shape=(256,256,3),n_layers=1,activation_function='relu',learning_rate=0.0001):
     inputs = Input(input_shape)
@@ -105,29 +84,16 @@ def unet_model(input_shape=(256,256,3),n_layers=1,activation_function='relu',lea
         bn9 = BatchNormalization(axis=3)(conv9)
         bn9 = Activation(activation_function)(bn9)
 
-    conv10 = Conv2D(3, 3,activation='softmax')(bn9)
+    conv10 = Conv2D(3, (1, 1), activation='sigmoid')(bn9)
     model=Model(inputs,conv10)
     decay_rate = learning_rate / 200
     opt = Adam(learning_rate=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=decay_rate, amsgrad=False)
     
-    model.compile(optimizer=opt,  loss=['sparse_categorical_crossentropy'], metrics=['accuracy'])
-
+    model.compile(optimizer=opt, loss=['sparse_categorical_crossentropy'], metrics=[ UpdatedMeanIoU(num_classes=3)])
     return model
 
-def mean_iou(y_true, y_pred):
-        y_pred = tf.round(tf.cast(y_pred, tf.int32))
-        intersect = tf.reduce_sum(tf.cast(y_true, tf.float32) * tf.cast(y_pred, tf.float32), axis=[1])
-        union = tf.reduce_sum(tf.cast(y_true, tf.float32),axis=[1]) + tf.reduce_sum(tf.cast(y_pred, tf.float32),axis=[1])
-        smooth = tf.ones(tf.shape(intersect))
-        return tf.reduce_mean((intersect + smooth) / (union - intersect + smooth))
 
-def iou_loss(y_true, y_pred):
-    y_true = tf.reshape(y_true, [-1])
-    y_pred = tf.reshape(y_pred, [-1])
-    intersection = tf.reduce_sum(tf.cast(y_true, tf.float32) * tf.cast(y_pred, tf.float32))
-    score = (intersection + 1.) / (tf.reduce_sum(tf.cast(y_true, tf.float32)) + 
-    tf.reduce_sum(tf.cast(y_pred, tf.float32)) - intersection + 1.)
-    return 1 - score
+
 def segmentation_unet_model(img_size,n_layers,activation_function,learning_rate):
     inputs = keras.Input(shape=img_size)
 
@@ -175,7 +141,7 @@ def segmentation_unet_model(img_size,n_layers,activation_function,learning_rate)
         previous_block_activation = x  # Set aside next residual
 
     # Add a per-pixel classification layer
-    outputs = layers.Conv2D(3, 3, activation="sigmoid", padding="same")(x)
+    outputs = layers.Conv2D(3, 3, activation="softmax", padding="same")(x)
     
     # Define the model
     model = keras.Model(inputs, outputs)
