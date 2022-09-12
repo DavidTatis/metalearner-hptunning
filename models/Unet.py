@@ -175,11 +175,24 @@ def segmentation_unet_model(img_size,n_layers,activation_function,learning_rate)
         previous_block_activation = x  # Set aside next residual
 
     # Add a per-pixel classification layer
-    outputs = layers.Conv2D(3, 3, activation="softmax", padding="same")(x)
+    outputs = layers.Conv2D(3, 3, activation="sigmoid", padding="same")(x)
     
     # Define the model
     model = keras.Model(inputs, outputs)
     decay_rate = learning_rate / 200
     opt = Adam(learning_rate=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=decay_rate, amsgrad=False)
-    model.compile(optimizer=opt,  loss=['sparse_categorical_crossentropy'], metrics=[iou])
+    model.compile(optimizer=opt,  loss=['sparse_categorical_crossentropy'], metrics=[ UpdatedMeanIoU(num_classes=3)])
     return model
+    
+class UpdatedMeanIoU(tf.keras.metrics.MeanIoU):
+  def __init__(self,
+               y_true=None,
+               y_pred=None,
+               num_classes=None,
+               name=None,
+               dtype=None):
+    super(UpdatedMeanIoU, self).__init__(num_classes = num_classes,name=name, dtype=dtype)
+
+  def update_state(self, y_true, y_pred, sample_weight=None):
+    y_pred = tf.math.argmax(y_pred, axis=-1)
+    return super().update_state(y_true, y_pred, sample_weight)
