@@ -136,6 +136,16 @@ def iou(y_true, y_pred):
     jac = (intersection + smooth) / (sum_ - intersection + smooth)
     return jac
 
+def dice_coef(y_true, y_pred):
+    smooth=100
+    y_truef=K.flatten(y_true)
+    y_predf=K.flatten(y_pred)
+    And=K.sum(y_truef* y_predf)
+    return((2* And + smooth) / (K.sum(y_truef) + K.sum(y_predf) + smooth))
+
+def dice_coef_loss(y_true, y_pred):
+    return -dice_coef(y_true, y_pred)
+
 
 
 #INITIALIZE POPULATION FOR 4 HPs
@@ -182,35 +192,35 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
   
 
 # Split our img paths into a training and a validation set
-  val_samples = 500
+  val_samples = 2217 # 20% for val and 10% test
   random.Random(1337).shuffle(input_img_paths)
   random.Random(1337).shuffle(target_img_paths)
   train_input_img_paths = input_img_paths[:-val_samples]
   train_target_img_paths = target_img_paths[:-val_samples]
   val_input_img_paths = input_img_paths[-val_samples:]
   val_target_img_paths = target_img_paths[-val_samples:]
-  # test_samples=500
-  # val_samples=val_samples-test_samples
+  test_samples=739 #10% of total images
+  val_samples=val_samples-test_samples
 
-  # val_input_img_paths=val_input_img_paths[0:500]
-  # val_target_img_paths=val_target_img_paths[0:500]
+  val_input_img_paths=val_input_img_paths[0:-500]
+  val_target_img_paths=val_target_img_paths[0:-500]
 
-  # test_input_img_paths=val_input_img_paths[500:]
-  # test_target_img_paths=val_target_img_paths[500:]
+  test_input_img_paths=val_input_img_paths[-500:]
+  test_target_img_paths=val_target_img_paths[-500:]
 
   # Instantiate data Sequences for each split
   train_gen = OxfordPets(
       batch_size, img_size, train_input_img_paths, train_target_img_paths
   )
   val_gen = OxfordPets(batch_size, img_size, val_input_img_paths, val_target_img_paths)
-  # test_gen = OxfordPets(batch_size, img_size, test_input_img_paths, test_target_img_paths)
+  test_gen = OxfordPets(batch_size, img_size, test_input_img_paths, test_target_img_paths)
   
   start_time= timeit.default_timer()
-  history = model.fit(train_gen, epochs=max_epochs,callbacks=[EarlyStopping(patience=patience_epochs)])
+  history = model.fit(train_gen, epochs=max_epochs,validation_data=val_gen,callbacks=[EarlyStopping(patience=patience_epochs)])
   end_time = timeit.default_timer()
 
   
-  results = model.predict(val_gen)
+  results = model.evaluate(test_gen)
   print("Test IOU: ",results)
   metric_test=results[1]
   #SAVE THE WEIGHTS
@@ -411,13 +421,13 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
 
 
 #FILES NAME
-hp_dataset_name="metadata_segmentation_ml.csv"
+hp_dataset_name="metadata_segmentation_ml2.csv"
 weights_folder="data/weights/"
 data_file_name="data/metadataset.csv"
 
 #HYPERPARAMETERS TO EVALUATE
 num_features=3
-training_samples=len(input_img_paths)-500
+training_samples=len(input_img_paths)-739 #10% for test
 n_layers=[1,2,3]
 learning_rate=[0.01,0.001,0.0001,0.00001]
 batch_size=[8,16,32,64]
