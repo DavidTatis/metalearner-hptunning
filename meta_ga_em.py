@@ -41,7 +41,7 @@ import pathlib
 import pickle
 from glob import glob
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 initializer = tf.keras.initializers.GlorotUniform(seed=2)
 random.seed(22)
 
@@ -156,13 +156,13 @@ y_array = y_copy.reshape(y_copy.shape[0], y_copy.shape[2], y_copy.shape[3], 1)
 x_array = x_copy.reshape(x_copy.shape[0], x_copy.shape[2], x_copy.shape[3], 1)
 
 print("Creating patches")
-x_array=get_patches(x_array)
-y_array=get_patches(y_array)
+x_array=get_patches(x_array,size=128,stride=128)
+y_array=get_patches(y_array,size=128,stride=128)
 
 print("Creating oneHot")
 y_array_cropp=[]
-input_size=256
-output_size=256
+input_size=128
+output_size=128
 start_pixel=int((input_size-output_size)/2)
 end_pixel=start_pixel+output_size
 for image in y_array:
@@ -186,8 +186,8 @@ print(y_array_oneHot.shape)
 print(np.max(x_array),np.max(y_array_oneHot))
 
 #to use one-hot replace y_array_cropp for y_array_oneHot
-x_train, x_val, y_train, y_val = train_test_split(x_array, y_array_oneHot, test_size=0.2, random_state=0)
-
+x_train, x_test, y_train, y_test = train_test_split(x_array, y_array_oneHot, test_size=0.1, random_state=0)
+x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size=0.1, random_state=0)
 # =============
 
 print(x_train.shape,y_train.shape)
@@ -234,7 +234,7 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
   if(selected_arch=="mnr"):
     model=mnr_model(input_shape,n_layers,activation_function,learning_rate) 
   
-
+  
 # Split our img paths into a training and a validation set
   data_gen_args = dict(rotation_range=15.,
         width_shift_range=0.05,
@@ -243,7 +243,8 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
         zoom_range=0.2,
         horizontal_flip=True,
         vertical_flip=True,
-        fill_mode='constant')
+        fill_mode='constant',
+        validation_split=0.1)
 
   image_datagen = ImageDataGenerator(**data_gen_args)
   mask_datagen = ImageDataGenerator(**data_gen_args)
@@ -264,11 +265,26 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
           shuffle=True,
           seed=seed)
 
+  val_image_generator = image_datagen.flow(
+          x_val,
+          batch_size=batch_size,
+          shuffle=True,
+          seed=seed)
+  ## set the parameters for the data to come from (masks)
+  val_mask_generator = mask_datagen.flow(
+          y_val,
+          batch_size=batch_size,
+          shuffle=True,
+          seed=seed)  
+
   # combine generators into one which yields image and masks
   train_generator = (pair for pair in zip(image_generator, mask_generator))
+  val_generator = (pair for pair in zip(val_image_generator, val_mask_generator))
   history=model.fit_generator(
       train_generator,
       steps_per_epoch=len(x_train) // batch_size,
+      validation_data=val_generator,
+      validation_steps=1,
       callbacks=[EarlyStopping(patience=patience_epochs)],
       epochs=max_epochs)
    
@@ -277,7 +293,7 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
   end_time = timeit.default_timer()
 
   
-  results = model.evaluate(x_val,y_val)
+  results = model.evaluate(x_test,y_test)
   print("Test IOU: ",results)
   metric_test=results[1]
   #SAVE THE WEIGHTS
@@ -478,16 +494,16 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
 
 
 #FILES NAME
-hp_dataset_name="metadata_seg_em_no-ml.csv"
+hp_dataset_name="metadata_isbi2012_ml.csv"
 weights_folder="data/weights/"
 data_file_name="data/metadataset.csv"
 
 #HYPERPARAMETERS TO EVALUATE
 num_features=3
-training_samples=len(x_train)
+training_samples=len(x_train)+len(x_val)
 n_layers=[1,2,3]
 learning_rate=[0.01,0.001,0.0001,0.00001]
-batch_size=[4,8,16,32]
+batch_size=[8,16,32,64]
 activation_function=['relu','elu','tanh','sigmoid']
 
 
@@ -513,7 +529,7 @@ top_lr,top_bs,top_layers,top_af,finish_order,selected_arch=meta_learner(dnn_arch
 print(selected_arch)
 
 
-input_shape=(256,256,1)
+input_shape=(128,128,1)
 max_epochs=200
 patience_epochs=20
 metric_to_evaluate="iou"
@@ -529,7 +545,7 @@ sel_prt=2
 rand_prt=1
 generations=3
 
-use_metalearner=False
+use_metalearner=True
 
 all_ga,top_ga, hparams_ga=genetic_algorithm_main(use_metalearner,
                                                 population_size,
