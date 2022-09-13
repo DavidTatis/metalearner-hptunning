@@ -250,7 +250,7 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
   seed = 0
   image_datagen.fit(x_train, augment=True, seed=seed)
   mask_datagen.fit(y_train, augment=True, seed=seed)
-
+  
 
   image_generator = image_datagen.flow(
           x_train,
@@ -265,9 +265,10 @@ def evaluate_fitness(input_shape,n_layers,activation_function,learning_rate,batc
           seed=seed)
 
   # combine generators into one which yields image and masks
-  train_generator = zip(image_generator, mask_generator)
-  model.fit_generator(
+  train_generator = (pair for pair in zip(image_generator, mask_generator))
+  history=model.fit_generator(
       train_generator,
+      steps_per_epoch=len(x_train) // batch_size,
       callbacks=[EarlyStopping(patience=patience_epochs)],
       epochs=max_epochs)
    
@@ -486,7 +487,7 @@ num_features=3
 training_samples=len(x_train)
 n_layers=[1,2,3]
 learning_rate=[0.01,0.001,0.0001,0.00001]
-batch_size=[8,16,32,64]
+batch_size=[4,8,16,32]
 activation_function=['relu','elu','tanh','sigmoid']
 
 
@@ -512,7 +513,7 @@ top_lr,top_bs,top_layers,top_af,finish_order,selected_arch=meta_learner(dnn_arch
 print(selected_arch)
 
 
-input_shape=(160,160,3)
+input_shape=(256,256,1)
 max_epochs=200
 patience_epochs=20
 metric_to_evaluate="iou"
