@@ -37,7 +37,7 @@ import pathlib
 import pickle
 from glob import glob
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 initializer = tf.keras.initializers.GlorotUniform(seed=2)
 random.seed(22)
 
@@ -369,20 +369,21 @@ def genetic_algorithm_main(use_metalearner,population_size,input_shape,hp_datase
 
 
 #FILES NAME
-hp_dataset_name="metadata_enrique.csv"
+hp_dataset_name="metadata_enrique_no-ml.csv"
 weights_folder="data/weights/"
 data_file_name="data/metadataset.csv"
 
 #HYPERPARAMETERS TO EVALUATE
-num_features=30
-training_samples=len(xtrain)
-n_layers=[1,2,3]
+n_layers = [1,2,3,4,5]
+activation_function=['relu','tanh','sigmoid','elu']
 learning_rate=[0.01,0.001,0.0001,0.00001]
-batch_size=[8,16,32,64]
-activation_function=['relu','elu','tanh','sigmoid']
-
+batch_size=[8,16,32,64,128]
+max_epochs=1000
+patience_epochs=200
 
 # METALEARNER
+num_features=30
+training_samples=len(xtrain)
 to_categorical_column_names=["activation_function"] 
 dataset_column_names=["architecture","error_metric","task","num_features",
                     "training_samples","n_layers","activation_function",
@@ -405,9 +406,7 @@ print(selected_arch)
 
 
 input_shape=(patch_size,patch_size,num_pca)
-max_epochs=2
-patience_epochs=2
-metric_to_evaluate="iou"
+metric_to_evaluate="acc"
 error_metric=0
 
 
